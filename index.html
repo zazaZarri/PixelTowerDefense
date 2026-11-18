@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Tower Defense</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="logo">PIXEL<span>TD</span></div>
+    <div class="stat heart">♥ <b id="lives">20</b></div>
+    <div class="stat coin">● <b id="gold">150</b></div>
+    <div class="stat">ONDATA <b id="wave">0</b></div>
+    <div class="stat dim">RECORD <b id="best">0</b></div>
+    <div class="spacer"></div>
+    <button id="btnRules" class="btn small" title="Regole della partita">⚙ REGOLE</button>
+    <button id="btnSound" class="btn small" title="Effetti sonori">🔊</button>
+    <button id="btnMusic" class="btn small" title="Musica">♪</button>
+    <button id="btnAuto" class="btn small" title="Ondate automatiche">AUTO</button>
+    <button id="btnSpeed" class="btn small" title="Velocità">x1</button>
+    <button id="btnPause" class="btn small" title="Pausa (P)">❚❚</button>
+    <button id="btnWave" class="btn green" title="Avvia ondata (SPAZIO)">▶ ONDATA</button>
+  </header>
+  <main>
+    <div id="stage">
+      <canvas id="game" width="480" height="272"></canvas>
+      <div id="overlay" class="hidden">
+        <div class="go">GAME OVER</div>
+        <div class="sub">Sei arrivato all'ondata <b id="ovWave">0</b></div>
+        <button id="btnRestart" class="btn green">↻ RIGIOCA</button>
+      </div>
+    </div>
+    <aside id="side">
+      <section>
+        <h2>PERSONAGGI</h2>
+        <div id="shop"></div>
+        <button id="btnNew" class="btn purple wide">+ CREA PERSONAGGIO</button>
+        <div class="row">
+          <button id="btnExport" class="btn small">ESPORTA</button>
+          <button id="btnImport" class="btn small">IMPORTA</button>
+          <button id="btnResetDefs" class="btn small red" title="Ripristina default">↺</button>
+        </div>
+        <input type="file" id="fileImport" accept=".json,application/json" hidden>
+      </section>
+      <section>
+        <h2>ARMI</h2>
+        <div id="weapons"></div>
+        <button id="btnNewWeapon" class="btn wide orange">+ CREA ARMA</button>
+      </section>
+      <section id="info"></section>
+      <section class="help">
+        <h2>COMANDI</h2>
+        <p><kbd>1-9</kbd> scegli · <kbd>CLIC</kbd> piazza<br><kbd>SPAZIO</kbd> ondata · <kbd>P</kbd> pausa<br><kbd>U</kbd> upgrade · <kbd>CANC</kbd> vendi<br><kbd>TASTO DX</kbd>/<kbd>ESC</kbd> annulla</p>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div id="editor" class="modal hidden">
+  <div class="win">
+    <div class="win-head"><span id="edTitle">EDITOR PERSONAGGIO</span><button id="edClose" class="btn small red">✕</button></div>
+    <div class="win-body">
+      <div class="col code-col">
+        <div class="label">CODICE <span class="hint">scrivi le specifiche, es. <code>var firerate = 2;</code> — CTRL+S salva</span></div>
+        <div class="code-wrap">
+          <pre id="lineNums"></pre>
+          <div class="code-area"><pre id="hl" aria-hidden="true"></pre><textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div>
+        </div>
+        <div id="edError" class="err"></div>
+        <div id="wChips" class="chips"></div>
+        <details class="vars" open><summary>VARIABILI DISPONIBILI (clic per inserire)</summary><div id="varList"></div></details>
+      </div>
+      <div class="col art-col" id="artCol">
+        <div class="label">SPRITE 16×16 <canvas id="pixMini" width="32" height="32"></canvas></div>
+        <div class="tools">
+          <button class="tbtn on" data-tool="pencil" title="Matita (tasto dx = gomma)">✎</button>
+          <button class="tbtn" data-tool="eraser" title="Gomma">⌫</button>
+          <button class="tbtn" data-tool="fill" title="Secchiello">◧</button>
+          <button class="tbtn" data-tool="picker" title="Contagocce">⊙</button>
+          <button class="tbtn" id="btnMirror" title="Specchio">⇋</button>
+          <button class="tbtn" id="btnShift" title="Capovolgi orizzontale">↔</button>
+          <button class="tbtn" id="btnUndo" title="Annulla (CTRL+Z)">↶</button>
+          <button class="tbtn wide" id="btnRegen" title="Rigenera dal colore e dal tipo di proiettile">AUTO</button>
+          <button class="tbtn" id="btnClear" title="Pulisci">✕</button>
+        </div>
+        <canvas id="pix" width="288" height="288"></canvas>
+        <div id="swatches"></div>
+        <div class="label">ANTEPRIMA LIVE <button id="pvReset" class="tbtn wide">↻</button></div>
+        <canvas id="preview" width="240" height="120"></canvas>
+        <div id="pvStats"></div>
+      </div>
+    </div>
+    <div class="win-foot">
+      <button id="edDelete" class="btn red">ELIMINA</button>
+      <div class="spacer"></div>
+      <button id="edCancel" class="btn">ANNULLA</button>
+      <button id="edSave" class="btn green">✓ SALVA</button>
+    </div>
+  </div>
+</div>
+
+<div id="wEditor" class="modal hidden">
+  <div class="win">
+    <div class="win-head"><span id="wTitle">NUOVA ARMA</span><button id="wClose" class="btn small red">✕</button></div>
+    <div class="win-body">
+      <div class="col code-col">
+        <div class="label">CODICE ARMA <span class="hint">effetti, grandezza, movimento, suoni — es. <code>var size = 2;</code></span></div>
+        <div class="code-wrap">
+          <pre id="wNums" class="nums"></pre>
+          <div class="code-area"><pre id="wHl" class="hl" aria-hidden="true"></pre><textarea id="wCode" class="codeta" spellcheck="false" autocomplete="off"></textarea></div>
+        </div>
+        <div id="wErr" class="err"></div>
+        <details class="vars" open><summary>VARIABILI DELL'ARMA (clic per inserire)</summary><div id="wVarList" class="varlist"></div></details>
+      </div>
+      <div class="col art-col">
+        <div class="label">COSA SPARA <canvas id="wMini" width="40" height="40"></canvas></div>
+        <div class="tools">
+          <button class="tbtn on" data-wtool="pencil" title="Matita (tasto dx = gomma)">✎</button>
+          <button class="tbtn" data-wtool="eraser" title="Gomma">⌫</button>
+          <button class="tbtn" data-wtool="fill" title="Secchiello">◧</button>
+          <button class="tbtn" data-wtool="picker" title="Contagocce">⊙</button>
+          <button class="tbtn" id="wMirror" title="Specchio">⇋</button>
+          <button class="tbtn" id="wFlip" title="Capovolgi">↔</button>
+          <button class="tbtn" id="wRot" title="Ruota 90°">⟳</button>
+          <button class="tbtn" id="wUndo" title="Annulla (CTRL+Z)">↶</button>
+          <button class="tbtn wide" id="wOutline" title="Aggiungi contorno nero">CONTORNO</button>
+          <button class="tbtn" id="wClear" title="Pulisci">✕</button>
+        </div>
+        <div class="tools">
+          <button class="tbtn wide orange" id="wUpload" title="Carica un'immagine (PNG, JPG, GIF…)">📁 CARICA IMMAGINE</button>
+          <select id="wRes" class="sel" title="Risoluzione"></select>
+          <input type="color" id="wColor" value="#f4f4f4" title="Colore libero">
+          <input type="file" id="wFile" accept="image/*" hidden>
+        </div>
+        <canvas id="wPix" width="288" height="288"></canvas>
+        <div class="hint">Trascina un'immagine sulla griglia o incollala con CTRL+V</div>
+        <div id="wSw" class="swatches"></div>
+        <div class="label">ANTEPRIMA <select id="wTower" class="sel"></select><button id="wPvSound" class="tbtn" title="Suoni anteprima">🔊</button><button id="wPvReset" class="tbtn">↻</button></div>
+        <canvas id="wPv" width="240" height="120" class="pv"></canvas>
+        <div id="wPvStats" class="pvstats"></div>
+      </div>
+    </div>
+    <div class="win-foot">
+      <button id="wDelete" class="btn red">ELIMINA</button>
+      <div class="spacer"></div>
+      <button id="wCancel" class="btn">ANNULLA</button>
+      <button id="wSave" class="btn green">✓ SALVA ARMA</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/palette.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/vfx.js"></script>
+<script src="js/world.js"></script>
+<script src="js/map.js"></script>
+<script src="js/defaults.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/weaponEditor.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
