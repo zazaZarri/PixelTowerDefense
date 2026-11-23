@@ -32,11 +32,11 @@ const VAR_DOCS=[
  ["description",'"..."',"Descrizione nel negozio"],
 ];
 
-const RULES_DEFAULTS={ startGold:150, startLives:20, hpScale:1, enemySpeed:1, goldMult:1, waveSize:1, bossEvery:10, sellRefund:0.7, waveBonus:20, autoWaveDelay:3 };
+const RULES_DEFAULTS={ startGold:150, startLives:20, hpScale:1, enemySpeed:1, goldMult:1, firstWave:6, perWave:2, bossEvery:10, sellRefund:0.7, waveBonus:20, autoWaveDelay:3 };
 const RULE_DOCS=[
  ["startGold","150","Oro iniziale"], ["startLives","20","Vite iniziali"], ["hpScale","1","Moltiplicatore vita nemici"],
  ["enemySpeed","1","Moltiplicatore velocità nemici"], ["goldMult","1","Moltiplicatore oro per uccisione"],
- ["waveSize","1","Moltiplicatore numero nemici"], ["bossEvery","10","Boss ogni N ondate (0 = mai)"],
+ ["firstWave","6","Nemici nella prima ondata"], ["perWave","2","Nemici in più a ogni ondata"], ["bossEvery","10","Boss ogni N ondate (0 = mai)"],
  ["sellRefund","0.7","Rimborso alla vendita (0 … 1)"], ["waveBonus","20","Oro bonus a fine ondata"],
  ["autoWaveDelay","3","Secondi tra ondate in modalità AUTO"],
 ];
@@ -47,7 +47,8 @@ var startLives = 20;
 var hpScale = 1;        // vita nemici
 var enemySpeed = 1;     // velocità nemici
 var goldMult = 1;       // oro per uccisione
-var waveSize = 1;       // quanti nemici per ondata
+var firstWave = 6;      // nemici nella prima ondata
+var perWave = 2;        // nemici in più a ogni ondata
 var bossEvery = 10;     // boss ogni N ondate
 var sellRefund = 0.7;   // rimborso vendita
 var waveBonus = 20;     // bonus fine ondata
@@ -291,7 +292,7 @@ function parseRules(code){
   try{ const v=runVars(code,Object.keys(RULES_DEFAULTS)); const s={...RULES_DEFAULTS};
     for(const k in RULES_DEFAULTS){ const n=Number(v[k]); if(v[k]!==undefined && isFinite(n)) s[k]=n; }
     s.startGold=Math.max(0,Math.round(s.startGold)); s.startLives=Math.max(1,Math.round(s.startLives)); s.hpScale=Math.max(0.05,s.hpScale);
-    s.enemySpeed=Math.min(5,Math.max(0.1,s.enemySpeed)); s.waveSize=Math.max(0.1,s.waveSize); s.bossEvery=Math.max(0,Math.round(s.bossEvery));
+    s.enemySpeed=Math.min(5,Math.max(0.1,s.enemySpeed)); s.firstWave=Math.min(100,Math.max(1,Math.round(s.firstWave))); s.perWave=Math.min(20,Math.max(0,Math.round(s.perWave))); s.bossEvery=Math.max(0,Math.round(s.bossEvery));
     s.sellRefund=Math.min(1,Math.max(0,s.sellRefund)); s.autoWaveDelay=Math.max(0,s.autoWaveDelay);
     return {ok:true,stats:s,warn:[]};
   }catch(e){ return {ok:false,error:e.message,stats:{...RULES_DEFAULTS},warn:[]}; }
@@ -306,7 +307,8 @@ const Store={
   migrate(raws){ try{ if(localStorage.getItem("ptd_v2")) return raws; localStorage.setItem("ptd_v2","1"); }catch(e){ return raws; }
     const have=new Set(raws.map(r=>r.id)); Store.defaultDefs().forEach(d=>{ if(!have.has(d.id)) raws.push(d); }); return raws; },
   saveDefs(raws){ try{ localStorage.setItem("ptd_defs_v1",JSON.stringify(raws)); }catch(e){} },
-  loadRules(){ try{ const r=localStorage.getItem("ptd_rules_v1"); if(r) return r; }catch(e){} return RULES_CODE; },
+  // le vecchie regole usavano waveSize (moltiplicatore): lo sostituisco con firstWave/perWave
+  loadRules(){ try{ const r=localStorage.getItem("ptd_rules_v1"); if(r) return /firstWave/.test(r)?r:r.replace(/^.*\bwaveSize\b.*$/m,"").trimEnd()+"\nvar firstWave = 6;      // nemici nella prima ondata\nvar perWave = 2;        // nemici in più a ogni ondata\n"; }catch(e){} return RULES_CODE; },
   saveRules(c){ try{ localStorage.setItem("ptd_rules_v1",c); }catch(e){} },
 };
 function hydrateDef(raw){

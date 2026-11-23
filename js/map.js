@@ -3,10 +3,19 @@
 const TILE=16, COLS=30, ROWS=17, GW=480, GH=272;
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 
+// Stage: il sentiero parte sempre dal portale [-1,3] e finisce al castello [28,7]
+const STAGES=[
+  {name:"PRATO",   diff:"FACILE",    waves:10, seed:7,  trees:0.075, tint:null,
+   wp:[[-1,3],[6,3],[6,12],[13,12],[13,4],[20,4],[20,13],[26,13],[26,7],[28,7]]},
+  {name:"FORESTA", diff:"MEDIO",     waves:15, seed:21, trees:0.22,  tint:"rgba(10,40,30,0.30)",
+   wp:[[-1,3],[3,3],[3,14],[10,14],[10,1],[17,1],[17,14],[24,14],[24,7],[28,7]]},
+  {name:"VULCANO", diff:"DIFFICILE", waves:20, seed:99, trees:0.04,  tint:"rgba(140,30,0,0.28)",
+   wp:[[-1,3],[8,3],[8,10],[16,10],[16,5],[23,5],[23,11],[26,11],[26,7],[28,7]]},
+];
 class GameMap {
-  constructor(seed=7){
-    this.seed=seed;
-    this.wp=[[-1,3],[6,3],[6,12],[13,12],[13,4],[20,4],[20,13],[26,13],[26,7],[28,7]];
+  constructor(stage=STAGES[0]){
+    const seed=stage.seed; this.seed=seed; this.stage=stage;
+    this.wp=stage.wp;
     this.tiles=new Uint8Array(COLS*ROWS); // 0 erba, 1 sentiero, 2 albero, 3 castello
     this.pathSet=new Set();
     for(let i=0;i<this.wp.length-1;i++){ let [c,r]=this.wp[i]; const [c2,r2]=this.wp[i+1];
@@ -17,7 +26,7 @@ class GameMap {
     const R=mulberry32(seed);
     for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(this.get(c,r)!==0) continue;
       let near=false; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++) if(this.pathSet.has((r+dy)*COLS+(c+dx)) && this.inB(c+dx,r+dy)) near=true;
-      if(!near && R()<0.075) this.tiles[r*COLS+c]=2; }
+      if(!near && R()<stage.trees) this.tiles[r*COLS+c]=2; }
     this.bg=this.render();
   }
   inB(c,r){ return c>=0&&c<COLS&&r>=0&&r<ROWS; }
@@ -52,6 +61,7 @@ class GameMap {
       else if(q<0.25){ const mx=x+5+(R()*6|0), my=y+5+(R()*6|0); g.fillStyle=PAL[12]; g.fillRect(mx,my+2,2,2); g.fillStyle=PAL[2]; g.fillRect(mx-1,my,4,2); g.fillStyle=PAL[12]; g.fillRect(mx,my,1,1); } }
     for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.get(c,r)===2) this.drawTree(g,c*TILE,r*TILE,R);
     this.drawCastle(g);
+    if(this.stage.tint){ g.fillStyle=this.stage.tint; g.fillRect(0,0,GW,GH); }
     return cv;
   }
   drawTree(g,px,py,R){

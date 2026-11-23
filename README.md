@@ -4,8 +4,11 @@ Tower defense 2D in pixel art con **editor dei personaggi**.
 Nessuna installazione: apri `index.html` con Chrome, Edge o Firefox.
 
 ## Come si gioca
-- Scegli un personaggio a destra (o premi `1`–`9`) e clicca su una casella d'erba per piazzarlo.
-- Premi **▶ ONDATA** (o `SPAZIO`) per far partire i nemici dal portale. Se arrivano al castello perdi vite.
+- Scegli lo **stage**: PRATO (facile, 10 ondate), FORESTA (medio, 15), VULCANO (difficile, 20). Superi l'ultima ondata (con boss) = vittoria, fino a 3 stelle.
+- Hai 20 secondi per piazzare le truppe, poi le ondate partono da sole. **▶ ONDATA** (o `SPAZIO`) le chiama prima e dà oro bonus.
+- Dall'ondata 3 alcune ondate hanno un modificatore: VELOCI, CORAZZATI, SCIAME, GIGANTI.
+- **Casse del codice** 📦: dal pannello **CASSE DEL CODICE** ne apri quante vuoi (e dopo le ondate dispari ne compare una anche sulla mappa). Metti in ordine i blocchi stile Scratch per aprirla: sblocchi una truppa segreta (le truppe bloccate non si vedono), o +40 oro quando le hai tutte: una slot con i personaggi gira, si ferma su "?" e rivela la ricompensa. Sfide semplicissime (max 4 blocchi): la prima è una **sequenza** facile (apri la cassa), tutte le altre sono **numeri** (parti da numero = X e metti in fila 3-4 operazioni + − × per arrivare al numero del lucchetto, scartando 1-2 blocchi trappola; vale ogni ordine che ci arriva). Puzzle in `js/chest.js`.
+- Scegli un personaggio a destra (o premi `1`–`9`) e clicca su una casella d'erba per piazzarlo. Se i nemici arrivano al castello perdi vite.
 - Clicca su una torre per vedere le statistiche, potenziarla (`U`), venderla (`CANC`) o cambiare il bersaglio (primo / ultimo / più forte / più vicino).
 - `x1/x2/x3` cambia la velocità, `AUTO` fa partire le ondate da sole, `P` mette in pausa.
 - Ogni 10 ondate arriva il **BOSS**.
@@ -66,7 +69,7 @@ Tutti gli effetti sonori e la musica chiptune sono generati dal gioco (nessun fi
 - impatto: none, hit, thud, crack, splat, boom, zap, chime, pop, magic, ice
 
 ## Regole della partita
-**⚙ REGOLE** apre lo stesso editor per oro iniziale, vite, vita e velocità dei nemici, frequenza del boss, ecc.
+**⚙ REGOLE** apre lo stesso editor per oro iniziale, vite, vita e velocità dei nemici, frequenza del boss, ecc. Il numero di nemici è `firstWave` (nemici nella prima ondata) + `perWave` (nemici in più a ogni ondata): con 6 e 2 l'ondata 10 ha 24 nemici.
 
 ## Struttura della cartella
 ```

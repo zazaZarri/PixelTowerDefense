@@ -1,27 +1,57 @@
 "use strict";
 // ===== Gioco principale =====
 const $=id=>document.getElementById(id);
+// truppe da sbloccare con le casse, in questo ordine (id dei personaggi di default)
+const LOCKED_IDS=["d3","d6","d4","d9","d7","d5","d8","d10"];
+const PREP_TIME=20;   // secondi per piazzare le truppe prima della prima ondata
+const WAVE_MODS=[{n:"VELOCI",spd:1.2,hp:0.8},{n:"CORAZZATI",armor:2},{n:"SCIAME",count:1.5,hp:0.6},{n:"GIGANTI",hp:1.5,count:0.6,spd:0.85}];
+const CHEST_GOLD=40;  // premio di una cassa quando tutte le truppe sono già sbloccate
 const Game={
   init(){
     this.cv=$("game"); this.ctx=this.cv.getContext("2d"); this.ctx.imageSmoothingEnabled=false;
-    SFX.init(); this.map=new GameMap(7);
+    SFX.init(); this.stage=STAGES[0]; Chest.init();
     Weapons.list=WStore.load().map(hydrateWeapon);
     this.defs=Store.loadDefs().map(hydrateDef); this.persist();
     this.rulesCode=Store.loadRules(); this.rules=parseRules(this.rulesCode).stats;
     this.speed=1; this.autoWave=false; this.time=0; this.best=+(localStorage.getItem("ptd_best")||0);
-    this.bindUI(); this.reset(); this.resize(); window.addEventListener("resize",()=>this.resize());
+    this.loadUnlocks(); this.bindUI(); this.reset(); this.showMenu(); this.resize(); window.addEventListener("resize",()=>this.resize());
     Editor.init(); WeaponEditor.init(); this.renderWeapons();
     $("btnSound").classList.toggle("on",!SFX.muted); $("btnSound").textContent=SFX.muted?"🔇":"🔊"; $("btnMusic").classList.toggle("on",SFX.musicOn);
     requestAnimationFrame(t=>this.loop(t));
   },
-  reset(){
-    const R=this.rules;
+  reset(stage){
+    const R=this.rules; if(stage) this.stage=stage; this.map=new GameMap(this.stage);
     this.world=new World(this.map.path,{onKill:e=>this.onKill(e),onLeak:e=>this.onLeak(e)});
     this.gold=R.startGold; this.lives=R.startLives; this.wave=0; this.queue=[]; this.spawnT=0; this.waveActive=false;
-    this.occ=new Map(); this.selDef=null; this.selTower=null; this.over=false; this.paused=false; this.banner=null; this.redFlash=0; this.autoT=0;
-    $("overlay").classList.add("hidden"); this.setBanner("PREPARATI!","PIAZZA I PERSONAGGI E PREMI ONDATA");
+    this.occ=new Map(); this.selDef=null; this.selTower=null; this.over=false; this.paused=false; this.banner=null; this.redFlash=0;
+    this.chest=null; this.mod=null;
+    this.autoWave=true; this.autoT=PREP_TIME; $("btnAuto").classList.add("on");
+    $("overlay").classList.add("hidden"); this.setBanner("PREPARATI!","I NEMICI ARRIVANO TRA "+PREP_TIME+" SECONDI");
     this.renderShop(); this.renderInfo(); this.updTop();
   },
+  showMenu(){ this.inMenu=true; $("overlay").classList.add("hidden"); const box=$("stages"); box.innerHTML="";
+    STAGES.forEach(s=>{ let stars=0; try{ stars=+(localStorage.getItem("ptd_win_"+s.name)||0); }catch(_){}
+      const b=document.createElement("button"); b.className="btn stagebtn";
+      b.innerHTML=`<b>${s.name}</b><span>${s.diff}</span><span>${s.waves} ONDATE</span><span class="stars">${"★".repeat(stars)}${"☆".repeat(3-stars)}</span>`;
+      b.onclick=()=>{ this.inMenu=false; $("menu").classList.add("hidden"); this.reset(s); }; box.appendChild(b); });
+    $("menu").classList.remove("hidden"); this.updTop(); },
+  isBoss(n){ return (this.rules.bossEvery>0&&n%this.rules.bossEvery===0)||n===this.stage.waves; },
+  spawnChest(){ const free=[]; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.map.buildable(c,r)&&!this.occ.has(c+","+r)) free.push([c,r]);
+    if(!free.length) return false; this.chest=free[Math.floor(Math.random()*free.length)];
+    const x=this.chest[0]*TILE+8, y=this.chest[1]*TILE+8; this.world.fx.burst(x,y,20,[PAL[4],PAL[3],"#fff"],60,{add:true}); this.world.fx.ring(x,y,12,PAL[4],0.4); return true; },
+  // truppe sbloccate: restano salvate (anche cambiando regole o stage) finché non premi RIBLOCCA TUTTO
+  loadUnlocks(){ let un=[], n=0; try{ un=JSON.parse(localStorage.getItem("ptd_unlocked"))||[]; n=+(localStorage.getItem("ptd_chests")||0); }catch(_){}
+    this.locked=new Set(LOCKED_IDS.filter(id=>!un.includes(id)&&this.defs.some(d=>d.id===id))); this.chestsOpened=n; },
+  saveUnlocks(){ try{ localStorage.setItem("ptd_unlocked",JSON.stringify(LOCKED_IDS.filter(id=>!this.locked.has(id)))); localStorage.setItem("ptd_chests",this.chestsOpened); }catch(_){} },
+  relockAll(){ if(!confirm("Ribloccare tutte le truppe e azzerare le casse aperte?")) return;
+    try{ localStorage.removeItem("ptd_unlocked"); localStorage.removeItem("ptd_chests"); }catch(_){}
+    this.loadUnlocks(); if(this.selDef&&this.locked.has(this.selDef.id)) this.selDef=null; this.renderShop(); this.renderInfo(); },
+  // fromMap: cassa cliccata sulla mappa; altrimenti dal pannello CASSE (senza limiti)
+  openChest(fromMap){ if(this.over||this.inMenu) return; const id=[...this.locked][0], def=id?this.defs.find(d=>d.id===id):null;
+    Chest.open(def,()=>{ this.chestsOpened++; if(def) this.locked.delete(id); this.saveUnlocks(); const fx=this.world.fx;
+      if(fromMap&&this.chest){ const [c,r]=this.chest; fx.burst(c*TILE+8,r*TILE+8,30,[PAL[4],PAL[3],"#fff"],90,{add:true}); this.chest=null; }
+      if(def){ this.setBanner("SBLOCCATO!",def.stats.name.toUpperCase()); this.renderShop(); }
+      else { this.gold+=CHEST_GOLD; this.setBanner("CASSA APERTA!","+"+CHEST_GOLD+" ORO"); this.updTop(); } }); },
   // ---------- UI ----------
   bindUI(){
     $("btnWave").onclick=()=>this.startWave();
@@ -35,6 +65,7 @@ const Game={
     document.addEventListener("click",e=>{ if(e.target.closest("button,.card")) SFX.play("click"); });
     $("btnNew").onclick=()=>Editor.openTower(null);
     $("btnRestart").onclick=()=>this.reset();
+    $("btnMenu").onclick=()=>this.showMenu();
     $("btnExport").onclick=()=>{ const blob=new Blob([JSON.stringify({towers:this.rawDefs(),weapons:this.rawWeapons()},null,2)],{type:"application/json"});
       const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="personaggi.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); };
     $("btnImport").onclick=()=>$("fileImport").click();
@@ -48,20 +79,22 @@ const Game={
     cv.addEventListener("mouseleave",()=>{ this.hover=null; });
     cv.addEventListener("mousedown",e=>{ if(e.button!==0) return; this.click(e.shiftKey); });
     cv.addEventListener("contextmenu",e=>{ e.preventDefault(); this.selDef=null; this.selTower=null; this.renderShop(); this.renderInfo(); });
-    document.addEventListener("keydown",e=>{ if(Editor.open||WeaponEditor.isOpen||e.target.tagName==="TEXTAREA"||e.target.tagName==="INPUT") return;
+    document.addEventListener("keydown",e=>{ if(Editor.open||WeaponEditor.isOpen||Chest.isOpen||this.inMenu||e.target.tagName==="TEXTAREA"||e.target.tagName==="INPUT") return;
       if(e.key==="Escape"){ this.selDef=null; this.selTower=null; this.renderShop(); this.renderInfo(); }
       else if(e.key===" "){ e.preventDefault(); this.startWave(); }
       else if(e.key==="p"||e.key==="P") this.togglePause();
       else if(e.key==="u"||e.key==="U") this.upgradeSel();
       else if(e.key==="Delete"||e.key==="Backspace") this.sellSel();
-      else if(/^[1-9]$/.test(e.key)){ const d=this.defs[+e.key-1]; if(d) this.pickDef(d); } });
+      else if(/^[1-9]$/.test(e.key)){ const d=this.visibleDefs()[+e.key-1]; if(d) this.pickDef(d); } });
+    $("btnChest").onclick=()=>this.openChest(false);
+    $("btnRelock").onclick=()=>this.relockAll();
   },
   mouse(e){ const r=this.cv.getBoundingClientRect(); return [(e.clientX-r.left)/r.width*GW,(e.clientY-r.top)/r.height*GH]; },
   resize(){ const st=$("stage"); const s=Math.min((st.clientWidth-8)/GW,(st.clientHeight-8)/GH); const k=s>=1?Math.floor(s):s;
     this.cv.style.width=Math.floor(GW*k)+"px"; this.cv.style.height=Math.floor(GH*k)+"px"; },
   togglePause(){ if(this.over) return; this.paused=!this.paused; $("btnPause").textContent=this.paused?"▶":"❚❚"; },
-  updTop(){ $("gold").textContent=Math.floor(this.gold); $("lives").textContent=Math.max(0,this.lives); $("wave").textContent=this.wave;
-    $("btnWave").disabled=this.waveActive||this.over; $("best").textContent=this.best;
+  updTop(){ $("gold").textContent=Math.floor(this.gold); $("lives").textContent=Math.max(0,this.lives); $("wave").textContent=this.wave+"/"+this.stage.waves;
+    $("btnWave").disabled=this.waveActive||this.over||this.inMenu; $("best").textContent=this.best;
     document.querySelectorAll(".card").forEach(c=>{ const d=this.defs.find(x=>x.id===c.dataset.id); c.classList.toggle("poor",!!d&&d.stats.cost>this.gold); });
     const up=$("btnUp"); if(up&&this.selTower) up.disabled=!this.selTower.canUpgrade||this.gold<this.selTower.upgradePrice; },
   rawDefs(){ return this.defs.map(d=>({id:d.id,code:d.code,sprite:d.auto?null:d.sprite})); },
@@ -82,8 +115,10 @@ const Game={
   deleteDef(id){ this.defs=this.defs.filter(d=>d.id!==id); if(this.selDef&&this.selDef.id===id) this.selDef=null; this.persist(); this.renderShop(); },
   setRules(code){ this.rulesCode=code; Store.saveRules(code); this.rules=parseRules(code).stats; this.reset(); },
   pickDef(d){ if(this.over) return; this.selDef=this.selDef===d?null:d; this.selTower=null; this.renderShop(); this.renderInfo(); },
+  visibleDefs(){ return this.defs.filter(d=>!this.locked.has(d.id)); },
   renderShop(){ const box=$("shop"); box.innerHTML="";
-    this.defs.forEach((d,i)=>{ const s=d.stats, c=document.createElement("div"); c.className="card"+(this.selDef===d?" sel":"")+(d.ok?"":" bad"); c.dataset.id=d.id;
+    $("chestInfo").innerHTML=`Casse aperte: <b>${this.chestsOpened}</b><br>`+(this.locked.size?`Truppe segrete da sbloccare: <b>${this.locked.size}</b>`:`Tutte sbloccate! Ogni cassa ora vale +${CHEST_GOLD} oro`);
+    this.visibleDefs().forEach((d,i)=>{ const s=d.stats, c=document.createElement("div"); c.className="card"+(this.selDef===d?" sel":"")+(d.ok?"":" bad"); c.dataset.id=d.id;
       const cv=makeCanvas(16,16); cv.getContext("2d").drawImage(d.spr.n,0,0); cv.className="ico16";
       c.appendChild(cv);
       const t=document.createElement("div"); t.className="ct";
@@ -114,7 +149,8 @@ const Game={
     this.selTower=null; this.renderInfo(); this.updTop(); },
   noGold(x,y){ SFX.play("error"); this.world.fx.text(x,y,"ORO INSUFFICIENTE",PAL[2],1,0.9); },
   click(shift){
-    if(this.over||!this.hover) return; const [c,r]=this.hover; const key=c+","+r;
+    if(this.over||this.inMenu||!this.hover) return; const [c,r]=this.hover; const key=c+","+r;
+    if(this.chest&&this.chest[0]===c&&this.chest[1]===r){ this.openChest(true); return; }
     if(this.selDef){ const d=this.selDef;
       if(!this.map.buildable(c,r)||this.occ.has(key)){ this.world.fx.text(c*TILE+8,r*TILE,"NO",PAL[2]); SFX.play("error"); return; }
       if(this.gold<d.stats.cost){ this.noGold(c*TILE+8,r*TILE); return; }
@@ -123,18 +159,21 @@ const Game={
     const t=this.occ.get(key); this.selTower=t||null; this.renderInfo();
   },
   // ---------- ondate ----------
-  buildWave(n){ const R=this.rules, q=[]; const count=Math.max(1,Math.round((5+n*1.7)*R.waveSize)); const gap=Math.max(0.28,0.85-n*0.02);
+  buildWave(n){ const R=this.rules, q=[]; const mod=n>=3&&Math.random()<0.5?WAVE_MODS[Math.floor(Math.random()*WAVE_MODS.length)]:null; this.mod=mod;
+    const count=Math.max(1,Math.round((R.firstWave+(n-1)*R.perWave)*(mod&&mod.count||1))); const gap=Math.max(0.28,0.85-n*0.02);
     for(let i=0;i<count;i++){ const pool=[["slime",Math.max(1,6-n*0.5)]]; if(n>=2) pool.push(["goblin",3]); if(n>=4) pool.push(["bat",2+n*0.05]); if(n>=6) pool.push(["golem",1+n*0.08]);
       let tot=pool.reduce((a,p)=>a+p[1],0), x=Math.random()*tot, type=pool[0][0]; for(const [k,w] of pool){ x-=w; if(x<=0){ type=k; break; } }
       q.push({type,gap:gap*(type==="golem"?1.5:type==="bat"?0.6:1)}); }
     if(n%5===0) for(let i=0;i<Math.round(n/2);i++) q.push({type:"bat",gap:0.18});
-    if(R.bossEvery>0&&n%R.bossEvery===0) q.push({type:"boss",gap:1.5});
-    this.hpMult=R.hpScale*(1+(n-1)*0.2)*Math.pow(1.045,n-1);
+    if(this.isBoss(n)) q.push({type:"boss",gap:1.5});
+    this.hpMult=R.hpScale*(mod&&mod.hp||1)*(1+(n-1)*0.2)*Math.pow(1.045,n-1);
     return q; },
-  startWave(){ if(this.waveActive||this.over) return; this.wave++; this.queue=this.buildWave(this.wave); this.spawnT=0.3; this.waveActive=true; this.autoT=0;
-    const boss=this.rules.bossEvery>0&&this.wave%this.rules.bossEvery===0;
-    SFX.play(boss?"boss":"wave"); this.setBanner("ONDATA "+this.wave,boss?"!! ARRIVA IL BOSS !!":this.queue.length+" NEMICI"); this.updTop(); },
-  spawn(type){ const e=new Enemy(this.world,type,this.hpMult,this.rules.enemySpeed); this.world.enemies.push(e);
+  startWave(){ if(this.waveActive||this.over||this.inMenu) return;
+    const early=this.autoWave&&this.autoT>1?Math.ceil(this.autoT)*2:0; this.gold+=early; // bonus se chiami l'ondata in anticipo
+    this.wave++; this.queue=this.buildWave(this.wave); this.spawnT=0.3; this.waveActive=true; this.autoT=0;
+    const boss=this.isBoss(this.wave);
+    SFX.play(boss?"boss":"wave"); this.setBanner("ONDATA "+this.wave+"/"+this.stage.waves,boss?"!! ARRIVA IL BOSS !!":this.queue.length+" NEMICI"+(this.mod?" · "+this.mod.n:"")+(early?" · +"+early+" ORO":"")); this.updTop(); },
+  spawn(type){ const m=this.mod||{}; const e=new Enemy(this.world,type,this.hpMult,this.rules.enemySpeed*(m.spd||1)); e.armor+=m.armor||0; this.world.enemies.push(e);
     const fx=this.world.fx; fx.burst(6,56,type==="boss"?30:8,[PAL[11],PAL[9],PAL[1]],50,{add:true,life:0.4}); fx.ring(6,56,type==="boss"?20:8,PAL[11],0.3);
     if(type==="boss") fx.shake=5; },
   onKill(e){ const g=Math.max(1,Math.round(e.gold*this.rules.goldMult)); this.gold+=g; const fx=this.world.fx;
@@ -145,11 +184,16 @@ const Game={
     fx.burst(456,120,14,[PAL[2],PAL[3],"#fff"],60,{add:true}); fx.text(456,100,"-"+(e.boss?5:1),PAL[2],2,1);
     if(this.lives<=0) this.gameOver(); this.updTop(); },
   gameOver(){ SFX.play("gameover"); this.over=true; this.lives=0; if(this.wave>this.best){ this.best=this.wave; try{localStorage.setItem("ptd_best",this.best);}catch(_){} }
-    $("ovWave").textContent=this.wave; $("overlay").classList.remove("hidden"); this.updTop(); },
+    this.showEnd("GAME OVER",false,"Sei arrivato all'ondata "+this.wave+" di "+this.stage.waves); },
+  victory(){ SFX.play("bossdie"); this.over=true; const L=this.rules.startLives, stars=this.lives>=L?3:this.lives>=L/2?2:1;
+    try{ const k="ptd_win_"+this.stage.name; localStorage.setItem(k,Math.max(stars,+(localStorage.getItem(k)||0))); }catch(_){}
+    this.showEnd("VITTORIA!",true,"★".repeat(stars)+"☆".repeat(3-stars)+"  Hai difeso il castello: "+this.stage.name); },
+  showEnd(title,win,sub){ $("ovTitle").textContent=title; $("ovTitle").classList.toggle("win",win); $("ovSub").textContent=sub;
+    $("overlay").classList.remove("hidden"); this.updTop(); },
   setBanner(t,s){ this.banner={t,s,age:0,life:2.6}; },
   // ---------- loop ----------
   loop(ts){ const dt=Math.min(0.05,(ts-(this.last||ts))/1000); this.last=ts;
-    if(!this.paused&&!Editor.open&&!WeaponEditor.isOpen&&!this.over) for(let i=0;i<this.speed;i++) this.update(dt);
+    if(!this.paused&&!Editor.open&&!WeaponEditor.isOpen&&!Chest.isOpen&&!this.over&&!this.inMenu) for(let i=0;i<this.speed;i++) this.update(dt);
     else if(this.over) this.world.fx.update(dt);
     this.draw(); Editor.tick(dt); WeaponEditor.tick(dt);
     if((this._ui=(this._ui||0)+dt)>0.3){ this._ui=0; const t=this.selTower; if(t&&$("iK")){ $("iK").textContent=t.kills; $("iD").textContent=Math.round(t.dmgDone); } }
@@ -159,7 +203,9 @@ const Game={
     if(this.queue.length){ this.spawnT-=dt; if(this.spawnT<=0){ const q=this.queue.shift(); this.spawn(q.type); this.spawnT=q.gap; } }
     this.world.update(dt);
     if(this.waveActive&&!this.queue.length&&!this.world.enemies.length&&!this.over){ this.waveActive=false; const b=Math.round(this.rules.waveBonus+this.wave*3);
-      this.gold+=b; SFX.play("clear"); this.setBanner("ONDATA SUPERATA","+"+b+" ORO"); if(this.autoWave) this.autoT=this.rules.autoWaveDelay; this.updTop(); }
+      this.gold+=b; SFX.play("clear"); if(this.wave>=this.stage.waves){ this.victory(); return; }
+      const ch=this.wave%2===1&&this.locked.size&&!this.chest&&this.spawnChest();
+      this.setBanner("ONDATA SUPERATA","+"+b+" ORO"+(ch?" · È APPARSA UNA CASSA! 📦":"")); if(this.autoWave) this.autoT=Math.max(this.rules.autoWaveDelay,8); this.updTop(); }
     if(this.autoWave&&this.autoT>0&&!this.waveActive){ this.autoT-=dt; if(this.autoT<=0) this.startWave(); }
     // ambiente
     if(Math.random()<dt*1.2) fx.part({x:rand(0,GW),y:rand(0,GH),vx:rand(-4,4),vy:rand(-6,-2),life:rand(2,4),colors:[PAL[5],PAL[4],PAL[5]],add:true,drag:0,sway:rand(0,6),blink:Math.random()<0.5});
@@ -174,6 +220,7 @@ const Game={
     c.drawImage(this.map.bg,0,0);
     this.drawPortal(c,t); this.drawFlag(c,t);
     if(this.selTower) drawRange(c,this.selTower.x,this.selTower.y,this.selTower.st.range,"#ffffff",t);
+    if(this.chest) Chest.draw(c,this.chest[0],this.chest[1],t);
     W.draw(c);
     if(this.selTower){ const T=this.selTower; c.fillStyle=PAL[4]; const L=T.x-9, Tp=T.y-13, k=(Math.sin(t*6)>0)?1:0;
       c.fillRect(L-k,Tp-k,3,1); c.fillRect(L-k,Tp-k,1,3); c.fillRect(L+16+k,Tp-k,3,1); c.fillRect(L+18+k,Tp-k,1,3);
@@ -191,6 +238,7 @@ const Game={
       c.fillStyle="rgba(26,28,44,0.75)"; c.fillRect(0,100,GW,44); c.fillStyle=PAL[4]; c.fillRect(0,100,GW,1); c.fillRect(0,143,GW,1);
       drawText(c,B.t,GW/2+ox,107,PAL[12],3,PAL[0],"center"); if(B.s) drawText(c,B.s,GW/2-ox,131,PAL[4],1,PAL[0],"center"); } }
     if(this.paused) { c.fillStyle="rgba(26,28,44,0.55)"; c.fillRect(0,0,GW,GH); drawText(c,"PAUSA",GW/2,120,PAL[12],4,PAL[0],"center"); }
+    if(this.waveActive) drawText(c,"NEMICI RIMASTI "+(this.queue.length+this.world.enemies.length),GW/2,4,PAL[12],1,PAL[0],"center");
     if(this.autoT>0&&this.autoWave&&!this.waveActive) drawText(c,"PROSSIMA ONDATA "+Math.ceil(this.autoT),GW/2,4,PAL[12],1,PAL[0],"center");
   },
   drawPortal(c,t){ const cx=6, cy=56;

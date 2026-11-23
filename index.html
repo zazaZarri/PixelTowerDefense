@@ -28,12 +28,24 @@
     <div id="stage">
       <canvas id="game" width="480" height="272"></canvas>
       <div id="overlay" class="hidden">
-        <div class="go">GAME OVER</div>
-        <div class="sub">Sei arrivato all'ondata <b id="ovWave">0</b></div>
-        <button id="btnRestart" class="btn green">↻ RIGIOCA</button>
+        <div class="go" id="ovTitle">GAME OVER</div>
+        <div class="sub" id="ovSub"></div>
+        <div class="row"><button id="btnRestart" class="btn green">↻ RIGIOCA</button><button id="btnMenu" class="btn">☰ STAGE</button></div>
+      </div>
+      <div id="menu" class="hidden">
+        <div class="logo big">PIXEL<span>TD</span></div>
+        <div class="sub">SCEGLI LO STAGE</div>
+        <div id="stages"></div>
+        <p class="dim">I nemici partono da soli: piazza le truppe in fretta!<br>Apri le 📦 CASSE DEL CODICE (pannello a destra) per sbloccare nuove truppe.</p>
       </div>
     </div>
     <aside id="side">
+      <section>
+        <h2>📦 CASSE DEL CODICE</h2>
+        <p class="dim" id="chestInfo"></p>
+        <button id="btnChest" class="btn orange wide">📦 APRI UNA CASSA</button>
+        <button id="btnRelock" class="btn small red wide" title="Ribloccare tutte le truppe">↺ RIBLOCCA TUTTO</button>
+      </section>
       <section>
         <h2>PERSONAGGI</h2>
         <div id="shop"></div>
@@ -152,6 +164,35 @@
   </div>
 </div>
 
+<div id="chest" class="modal hidden">
+  <div class="win chwin">
+    <div class="win-head"><span id="chTitle">CASSA</span><button id="chClose" class="btn small red" title="Chiudi (la cassa resta sulla mappa)">✕</button></div>
+    <div id="chGame">
+      <p id="chGoal" class="chgoal"></p>
+      <div class="win-body">
+        <div class="col"><div class="label">BLOCCHI</div><div id="chPool" class="blkbox"></div></div>
+        <div class="col"><div class="label">IL TUO PROGRAMMA</div><div id="chProg" class="blkbox prog"></div></div>
+      </div>
+      <div id="chMsg" class="chmsg"></div>
+      <div class="win-foot">
+        <button id="chHelp" class="btn small">💡 AIUTO</button>
+        <button id="chReset" class="btn small red">↺ RICOMINCIA</button>
+        <div class="spacer"></div>
+        <button id="chRun" class="btn green">▶ ESEGUI</button>
+      </div>
+    </div>
+    <div id="chWin" class="chwinbox" hidden>
+      <canvas id="chSpr" width="160" height="192"></canvas>
+      <div id="chInfo" class="chwinbox">
+        <div><span id="chRewardT"></span><b id="chReward"></b></div>
+        <p id="chDesc" class="dim"></p>
+        <p class="chlesson">🎓 COSA HAI IMPARATO<br><span id="chLesson"></span></p>
+        <button id="chOk" class="btn green">CONTINUA ▶</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="js/palette.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/audio.js"></script>
@@ -162,6 +203,7 @@
 <script src="js/weapons.js"></script>
 <script src="js/editor.js"></script>
 <script src="js/weaponEditor.js"></script>
+<script src="js/chest.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
